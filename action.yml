@@ -1,0 +1,63 @@
+name: 'PR Dev Review Labeler'
+description: 'Automatically labels PRs when dev reviewers request changes, excluding QA team members'
+
+branding:
+  icon: 'tag'
+  color: 'orange'
+
+inputs:
+  qa-team-members:
+    description: 'Comma-separated list of QA team member GitHub usernames (e.g., "juan,anjelys,augusto")'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check if reviewer is QA team member
+      id: check_qa
+      shell: bash
+      run: |
+        IFS=',' read -ra QA_MEMBERS <<< "${{ inputs.qa-team-members }}"
+        REVIEWER="${{ github.event.review.user.login }}"
+        
+        IS_QA="false"
+        for member in "${QA_MEMBERS[@]}"; do
+          member=$(echo "$member" | xargs)
+          if [[ "$REVIEWER" == "$member" ]]; then
+            IS_QA="true"
+            echo "Reviewer $REVIEWER is a QA team member - skipping label"
+            break
+          fi
+        done
+        
+        echo "is_qa=$IS_QA" >> $GITHUB_OUTPUT
+        echo "reviewer=$REVIEWER" >> $GITHUB_OUTPUT
+
+    - name: Add label if not QA reviewer
+      if: steps.check_qa.outputs.is_qa == 'false' && github.event.review.state == 'changes_requested'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.payload.pull_request.number,
+            labels: ['dev-changes-requested']
+          });
+
+          console.log(`Label 'dev-changes-requested' added to PR #${context.payload.pull_request.number}`);
+          console.log( Reviewer: ${{ steps.check_qa.outputs.reviewer }}`);
+
+    - name: Remove label when approved
+      if: github.event.review.state == 'approved'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.issues.removeLabel({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.payload.pull_request.number,
+            name: 'dev-changes-requested'
+          });
+
+          console.log(`Label removed from PR #${context.payload.pull_request.number}`);
