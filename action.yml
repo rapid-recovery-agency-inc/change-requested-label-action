@@ -8,8 +8,8 @@ branding:
 runs:
   using: 'composite'
   steps:
-    - name: Add label if not QA reviewer
-      if: steps.check_qa.outputs.is_qa == 'false' && github.event.review.state == 'changes_requested'
+    - name: Add label when changes requested
+      if: github.event.review.state == 'changes_requested'
       uses: actions/github-script@v7
       with:
         script: |
