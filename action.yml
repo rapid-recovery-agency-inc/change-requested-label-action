@@ -1,4 +1,4 @@
-name: 'PR Dev Review Labeler'
+name: 'PR Changes Requested Labeler'
 description: 'Automatically labels pull requests when any reviewer requests changes'
 
 branding:
