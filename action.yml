@@ -35,3 +35,58 @@ runs:
             repo,
             pull_number
           });
+    
+    - name: Post workflow trigger comment
+      if: |
+        github.event_name == 'pull_request' && (
+          github.event.action == 'ready_for_review' ||
+          (
+            (github.event.action == 'opened' || github.event.action == 'reopened') &&
+            github.event.pull_request.draft == false
+          )
+        )
+      uses: actions/github-script@v7
+      env:
+        BUDDY_WEBHOOK: ${{ secrets.BUDDY_WEBHOOK }}
+        AMPLIFY_WEBHOOK: ${{ secrets.AMPLIFY_WEBHOOK }}
+
+      with:
+        script: |
+          const {BUDDY_WEBHOOK, AMPLIFY_WEBHOOK} = process.env;
+
+          if(!BUDDY_WEBHOOK && !AMPLIFY_WEBHOOK)
+          {
+            console.warn('No webhooks configured, skipping workflow trigger comment');
+            return;
+          }
+          const owner = context.repo.owner;
+          const repo  = context.repo.repo;
+          const prNumber = context.payload.pull_request.number;
+
+          let body = "On-Demand Execution Links\n\n";
+          body += "Use the following links to trigger the deployments.\n\n";
+
+          if(BUDDY_WEBHOOK)
+          {
+            body += - **Buddy** [Run Pipeline](${BUDDY_WEBHOOK})\n;
+          }
+          if(AMPLIFY_WEBHOOK)
+          {
+            body += - **Amplify** [Deploy to AWS](${AMPLIFY_WEBHOOK})\n;
+          }
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner, repo, issue_number: prNumber,
+          });
+
+          const existing = comments.find(
+            c => c.user.login.includes('github-actions') && c.body.includes('On-Demand Execution Links')
+          );
+          if(existing)
+          {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          }
+          else
+          {
+            await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+          }
